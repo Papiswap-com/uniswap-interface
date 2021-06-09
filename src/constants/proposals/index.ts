@@ -1,6 +1,4 @@
-import { UNISWAP_GRANTS_PROPOSAL_DESCRIPTION } from './uniswap_grants_proposal_description'
+import { UNISWAP_GRANTS } from './uniswap_grants'
 
 // Proposals are 0-indexed
-export const PROPOSAL_DESCRIPTION_TEXT: { [proposalId: number]: string } = {
-  [2]: UNISWAP_GRANTS_PROPOSAL_DESCRIPTION,
-}
+export const PRELOADED_PROPOSALS = new Map([[2, UNISWAP_GRANTS]])

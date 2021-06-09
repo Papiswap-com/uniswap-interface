@@ -1,6 +1,5 @@
 import React, { useState, useContext } from 'react'
-import { useActiveWeb3React } from '../../hooks/web3'
-import { getExplorerLink, ExplorerDataType } from '../../utils/getExplorerLink'
+import { useActiveWeb3React } from '../../hooks'
 
 import Modal from '../Modal'
 import { AutoColumn, ColumnCenter } from '../Column'
@@ -11,10 +10,9 @@ import { X, ArrowUpCircle } from 'react-feather'
 import { ButtonPrimary } from '../Button'
 import Circle from '../../assets/images/blue-loader.svg'
 import { useVoteCallback, useUserVotes } from '../../state/governance/hooks'
+import { getEtherscanLink } from '../../utils'
 import { ExternalLink } from '../../theme/components'
-import { formatCurrencyAmount } from 'utils/formatCurrencyAmount'
-import { CurrencyAmount, Token } from '@uniswap/sdk-core'
-import { Trans } from '@lingui/macro'
+import { TokenAmount } from '@uniswap/sdk'
 
 const ContentWrapper = styled(AutoColumn)`
   width: 100%;
@@ -46,11 +44,11 @@ interface VoteModalProps {
 export default function VoteModal({ isOpen, onDismiss, proposalId, support }: VoteModalProps) {
   const { chainId } = useActiveWeb3React()
   const {
-    voteCallback,
+    voteCallback
   }: {
     voteCallback: (proposalId: string | undefined, support: boolean) => Promise<string> | undefined
   } = useVoteCallback()
-  const availableVotes: CurrencyAmount<Token> | undefined = useUserVotes()
+  const availableVotes: TokenAmount | undefined = useUserVotes()
 
   // monitor call to help UI loading state
   const [hash, setHash] = useState<string | undefined>()
@@ -73,7 +71,7 @@ export default function VoteModal({ isOpen, onDismiss, proposalId, support }: Vo
     if (!voteCallback) return
 
     // try delegation and store hash
-    const hash = await voteCallback(proposalId, support)?.catch((error) => {
+    const hash = await voteCallback(proposalId, support)?.catch(error => {
       setAttempting(false)
       console.log(error)
     })
@@ -89,26 +87,16 @@ export default function VoteModal({ isOpen, onDismiss, proposalId, support }: Vo
         <ContentWrapper gap="lg">
           <AutoColumn gap="lg" justify="center">
             <RowBetween>
-              <TYPE.mediumHeader fontWeight={500}>
-                {support ? (
-                  <Trans>Vote for proposal {proposalId}</Trans>
-                ) : (
-                  <Trans>Vote against proposal {proposalId}</Trans>
-                )}
-              </TYPE.mediumHeader>
+              <TYPE.mediumHeader fontWeight={500}>{`Vote ${
+                support ? 'for ' : 'against'
+              } proposal ${proposalId}`}</TYPE.mediumHeader>
               <StyledClosed stroke="black" onClick={wrappedOndismiss} />
             </RowBetween>
-            <TYPE.largeHeader>
-              <Trans>{formatCurrencyAmount(availableVotes, 4)} Votes</Trans>
-            </TYPE.largeHeader>
+            <TYPE.largeHeader>{availableVotes?.toSignificant(4)} Votes</TYPE.largeHeader>
             <ButtonPrimary onClick={onVote}>
-              <TYPE.mediumHeader color="white">
-                {support ? (
-                  <Trans>Vote for proposal {proposalId}</Trans>
-                ) : (
-                  <Trans>Vote against proposal {proposalId}</Trans>
-                )}
-              </TYPE.mediumHeader>
+              <TYPE.mediumHeader color="white">{`Vote ${
+                support ? 'for ' : 'against'
+              } proposal  ${proposalId}`}</TYPE.mediumHeader>
             </ButtonPrimary>
           </AutoColumn>
         </ContentWrapper>
@@ -124,13 +112,9 @@ export default function VoteModal({ isOpen, onDismiss, proposalId, support }: Vo
           </ConfirmedIcon>
           <AutoColumn gap="100px" justify={'center'}>
             <AutoColumn gap="12px" justify={'center'}>
-              <TYPE.largeHeader>
-                <Trans>Submitting Vote</Trans>
-              </TYPE.largeHeader>
+              <TYPE.largeHeader>Submitting Vote</TYPE.largeHeader>
             </AutoColumn>
-            <TYPE.subHeader>
-              <Trans>Confirm this transaction in your wallet</Trans>
-            </TYPE.subHeader>
+            <TYPE.subHeader>Confirm this transaction in your wallet</TYPE.subHeader>
           </AutoColumn>
         </ConfirmOrLoadingWrapper>
       )}
@@ -145,18 +129,11 @@ export default function VoteModal({ isOpen, onDismiss, proposalId, support }: Vo
           </ConfirmedIcon>
           <AutoColumn gap="100px" justify={'center'}>
             <AutoColumn gap="12px" justify={'center'}>
-              <TYPE.largeHeader>
-                <Trans>Transaction Submitted</Trans>
-              </TYPE.largeHeader>
+              <TYPE.largeHeader>Transaction Submitted</TYPE.largeHeader>
             </AutoColumn>
             {chainId && (
-              <ExternalLink
-                href={getExplorerLink(chainId, hash, ExplorerDataType.TRANSACTION)}
-                style={{ marginLeft: '4px' }}
-              >
-                <TYPE.subHeader>
-                  <Trans>View transaction on Explorer</Trans>
-                </TYPE.subHeader>
+              <ExternalLink href={getEtherscanLink(chainId, hash, 'transaction')} style={{ marginLeft: '4px' }}>
+                <TYPE.subHeader>View transaction on Etherscan</TYPE.subHeader>
               </ExternalLink>
             )}
           </AutoColumn>

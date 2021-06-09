@@ -1,5 +1,4 @@
-import { Currency, CurrencyAmount, Token } from '@uniswap/sdk-core'
-import JSBI from 'jsbi'
+import { Currency, ETHER, JSBI, TokenAmount } from '@uniswap/sdk'
 import React, { useCallback, useEffect, useState } from 'react'
 import { Plus } from 'react-feather'
 import { Text } from 'rebass'
@@ -11,9 +10,8 @@ import { FindPoolTabs } from '../../components/NavigationTabs'
 import { MinimalPositionCard } from '../../components/PositionCard'
 import Row from '../../components/Row'
 import CurrencySearchModal from '../../components/SearchModal/CurrencySearchModal'
-import { ExtendedEther } from '../../constants/tokens'
-import { PairState, useV2Pair } from '../../hooks/useV2Pairs'
-import { useActiveWeb3React } from '../../hooks/web3'
+import { PairState, usePair } from '../../data/Reserves'
+import { useActiveWeb3React } from '../../hooks'
 import { usePairAdder } from '../../state/user/hooks'
 import { useTokenBalance } from '../../state/wallet/hooks'
 import { StyledInternalLink } from '../../theme'
@@ -22,30 +20,22 @@ import AppBody from '../AppBody'
 import { Dots } from '../Pool/styleds'
 import { BlueCard } from '../../components/Card'
 import { TYPE } from '../../theme'
-import { useLocation } from 'react-router'
-import { Trans } from '@lingui/macro'
 
 enum Fields {
   TOKEN0 = 0,
-  TOKEN1 = 1,
-}
-
-function useQuery() {
-  return new URLSearchParams(useLocation().search)
+  TOKEN1 = 1
 }
 
 export default function PoolFinder() {
-  const query = useQuery()
-
-  const { account, chainId } = useActiveWeb3React()
+  const { account } = useActiveWeb3React()
 
   const [showSearch, setShowSearch] = useState<boolean>(false)
   const [activeField, setActiveField] = useState<number>(Fields.TOKEN1)
 
-  const [currency0, setCurrency0] = useState<Currency | null>(() => (chainId ? ExtendedEther.onChain(chainId) : null))
+  const [currency0, setCurrency0] = useState<Currency | null>(ETHER)
   const [currency1, setCurrency1] = useState<Currency | null>(null)
 
-  const [pairState, pair] = useV2Pair(currency0 ?? undefined, currency1 ?? undefined)
+  const [pairState, pair] = usePair(currency0 ?? undefined, currency1 ?? undefined)
   const addPair = usePairAdder()
   useEffect(() => {
     if (pair) {
@@ -58,12 +48,12 @@ export default function PoolFinder() {
     Boolean(
       pairState === PairState.EXISTS &&
         pair &&
-        JSBI.equal(pair.reserve0.quotient, JSBI.BigInt(0)) &&
-        JSBI.equal(pair.reserve1.quotient, JSBI.BigInt(0))
+        JSBI.equal(pair.reserve0.raw, JSBI.BigInt(0)) &&
+        JSBI.equal(pair.reserve1.raw, JSBI.BigInt(0))
     )
 
-  const position: CurrencyAmount<Token> | undefined = useTokenBalance(account ?? undefined, pair?.liquidityToken)
-  const hasPosition = Boolean(position && JSBI.greaterThan(position.quotient, JSBI.BigInt(0)))
+  const position: TokenAmount | undefined = useTokenBalance(account ?? undefined, pair?.liquidityToken)
+  const hasPosition = Boolean(position && JSBI.greaterThan(position.raw, JSBI.BigInt(0)))
 
   const handleCurrencySelect = useCallback(
     (currency: Currency) => {
@@ -83,25 +73,19 @@ export default function PoolFinder() {
   const prerequisiteMessage = (
     <LightCard padding="45px 10px">
       <Text textAlign="center">
-        {!account ? (
-          <Trans>Connect to a wallet to find pools</Trans>
-        ) : (
-          <Trans>Select a token to find your v2 liquidity.</Trans>
-        )}
+        {!account ? 'Connect to a wallet to find pools' : 'Select a token to find your liquidity.'}
       </Text>
     </LightCard>
   )
 
   return (
     <AppBody>
-      <FindPoolTabs origin={query.get('origin') ?? '/pool/v2'} />
+      <FindPoolTabs />
       <AutoColumn style={{ padding: '1rem' }} gap="md">
         <BlueCard>
           <AutoColumn gap="10px">
             <TYPE.link fontWeight={400} color={'primaryText1'}>
-              <Trans>
-                <b>Tip:</b> Use this tool to find v2 pools that don&apos;t automatically appear in the interface.
-              </Trans>
+              <b>Tip:</b> Use this tool to find pairs that don&apos;t automatically appear in the interface.
             </TYPE.link>
           </AutoColumn>
         </BlueCard>
@@ -120,7 +104,7 @@ export default function PoolFinder() {
             </Row>
           ) : (
             <Text fontWeight={500} fontSize={20} marginLeft={'12px'}>
-              <Trans>Select a token</Trans>
+              Select a Token
             </Text>
           )}
         </ButtonDropdownLight>
@@ -144,7 +128,7 @@ export default function PoolFinder() {
             </Row>
           ) : (
             <Text fontWeight={500} fontSize={20} marginLeft={'12px'}>
-              <Trans>Select a token</Trans>
+              Select a Token
             </Text>
           )}
         </ButtonDropdownLight>
@@ -154,12 +138,10 @@ export default function PoolFinder() {
             style={{ justifyItems: 'center', backgroundColor: '', padding: '12px 0px', borderRadius: '12px' }}
           >
             <Text textAlign="center" fontWeight={500}>
-              <Trans>Pool Found!</Trans>
+              Pool Found!
             </Text>
-            <StyledInternalLink to={`/pool/v2`}>
-              <Text textAlign="center">
-                <Trans>Manage this pool.</Trans>
-              </Text>
+            <StyledInternalLink to={`/pool`}>
+              <Text textAlign="center">Manage this pool.</Text>
             </StyledInternalLink>
           </ColumnCenter>
         )}
@@ -171,13 +153,9 @@ export default function PoolFinder() {
             ) : (
               <LightCard padding="45px 10px">
                 <AutoColumn gap="sm" justify="center">
-                  <Text textAlign="center">
-                    <Trans>You don’t have liquidity in this pool yet.</Trans>
-                  </Text>
+                  <Text textAlign="center">You don’t have liquidity in this pool yet.</Text>
                   <StyledInternalLink to={`/add/${currencyId(currency0)}/${currencyId(currency1)}`}>
-                    <Text textAlign="center">
-                      <Trans>Add liquidity.</Trans>
-                    </Text>
+                    <Text textAlign="center">Add liquidity.</Text>
                   </StyledInternalLink>
                 </AutoColumn>
               </LightCard>
@@ -185,11 +163,9 @@ export default function PoolFinder() {
           ) : validPairNoLiquidity ? (
             <LightCard padding="45px 10px">
               <AutoColumn gap="sm" justify="center">
-                <Text textAlign="center">
-                  <Trans>No pool found.</Trans>
-                </Text>
+                <Text textAlign="center">No pool found.</Text>
                 <StyledInternalLink to={`/add/${currencyId(currency0)}/${currencyId(currency1)}`}>
-                  <Trans>Create pool.</Trans>
+                  Create pool.
                 </StyledInternalLink>
               </AutoColumn>
             </LightCard>
@@ -197,7 +173,7 @@ export default function PoolFinder() {
             <LightCard padding="45px 10px">
               <AutoColumn gap="sm" justify="center">
                 <Text textAlign="center" fontWeight={500}>
-                  <Trans>Invalid pair.</Trans>
+                  Invalid pair.
                 </Text>
               </AutoColumn>
             </LightCard>
@@ -205,7 +181,7 @@ export default function PoolFinder() {
             <LightCard padding="45px 10px">
               <AutoColumn gap="sm" justify="center">
                 <Text textAlign="center">
-                  <Trans>Loading</Trans>
+                  Loading
                   <Dots />
                 </Text>
               </AutoColumn>

@@ -1,25 +1,29 @@
-import styled, { DefaultTheme } from 'styled-components'
-import { ProposalState } from '../../state/governance/hooks'
+import styled from 'styled-components'
 
-const handleColorType = (status: ProposalState, theme: DefaultTheme) => {
+const handleColorType = (status?: any, theme?: any) => {
   switch (status) {
-    case ProposalState.Pending:
-    case ProposalState.Active:
+    case 'pending':
       return theme.blue1
-    case ProposalState.Succeeded:
-    case ProposalState.Executed:
+    case 'active':
+      return theme.blue1
+    case 'succeeded':
       return theme.green1
-    case ProposalState.Defeated:
+    case 'defeated':
       return theme.red1
-    case ProposalState.Queued:
-    case ProposalState.Canceled:
-    case ProposalState.Expired:
+    case 'queued':
+      return theme.text3
+    case 'executed':
+      return theme.green1
+    case 'canceled':
+      return theme.text3
+    case 'expired':
+      return theme.text3
     default:
       return theme.text3
   }
 }
 
-export const ProposalStatus = styled.span<{ status: ProposalState }>`
+export const ProposalStatus = styled.span<{ status: string }>`
   font-size: 0.825rem;
   font-weight: 600;
   padding: 0.5rem;

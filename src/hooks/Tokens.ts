@@ -1,18 +1,16 @@
+import { TokenAddressMap, useDefaultTokenList, useUnsupportedTokenList } from './../state/lists/hooks'
 import { parseBytes32String } from '@ethersproject/strings'
-import { Currency, Token } from '@uniswap/sdk-core'
-import { arrayify } from 'ethers/lib/utils'
+import { Currency, ETHER, Token, currencyEquals } from '@uniswap/sdk'
 import { useMemo } from 'react'
-import { createTokenFilterFunction } from '../components/SearchModal/filtering'
-import { ExtendedEther, WETH9_EXTENDED } from '../constants/tokens'
-import { useAllLists, useCombinedActiveList, useInactiveListUrls } from '../state/lists/hooks'
-import { WrappedTokenInfo } from '../state/lists/wrappedTokenInfo'
+import { useCombinedActiveList, useCombinedInactiveList } from '../state/lists/hooks'
 import { NEVER_RELOAD, useSingleCallResult } from '../state/multicall/hooks'
 import { useUserAddedTokens } from '../state/user/hooks'
 import { isAddress } from '../utils'
-import { TokenAddressMap, useUnsupportedTokenList } from './../state/lists/hooks'
 
-import { useActiveWeb3React } from './web3'
+import { useActiveWeb3React } from './index'
 import { useBytes32TokenContract, useTokenContract } from './useContract'
+import { filterTokens } from '../components/SearchModal/filtering'
+import { arrayify } from 'ethers/lib/utils'
 
 // reduce token map into standard address <-> Token mapping, optionally include user added tokens
 function useTokensFromMap(tokenMap: TokenAddressMap, includeUserAdded: boolean): { [address: string]: Token } {
@@ -23,13 +21,10 @@ function useTokensFromMap(tokenMap: TokenAddressMap, includeUserAdded: boolean):
     if (!chainId) return {}
 
     // reduce to just tokens
-    const mapWithoutUrls = Object.keys(tokenMap[chainId] ?? {}).reduce<{ [address: string]: Token }>(
-      (newMap, address) => {
-        newMap[address] = tokenMap[chainId][address].token
-        return newMap
-      },
-      {}
-    )
+    const mapWithoutUrls = Object.keys(tokenMap[chainId]).reduce<{ [address: string]: Token }>((newMap, address) => {
+      newMap[address] = tokenMap[chainId][address].token
+      return newMap
+    }, {})
 
     if (includeUserAdded) {
       return (
@@ -51,42 +46,38 @@ function useTokensFromMap(tokenMap: TokenAddressMap, includeUserAdded: boolean):
   }, [chainId, userAddedTokens, tokenMap, includeUserAdded])
 }
 
+export function useDefaultTokens(): { [address: string]: Token } {
+  const defaultList = useDefaultTokenList()
+  return useTokensFromMap(defaultList, false)
+}
+
 export function useAllTokens(): { [address: string]: Token } {
   const allTokens = useCombinedActiveList()
   return useTokensFromMap(allTokens, true)
 }
 
+export function useAllInactiveTokens(): { [address: string]: Token } {
+  // get inactive tokens
+  const inactiveTokensMap = useCombinedInactiveList()
+  const inactiveTokens = useTokensFromMap(inactiveTokensMap, false)
+
+  // filter out any token that are on active list
+  const activeTokensAddresses = Object.keys(useAllTokens())
+  const filteredInactive = activeTokensAddresses
+    ? Object.keys(inactiveTokens).reduce<{ [address: string]: Token }>((newMap, address) => {
+        if (!activeTokensAddresses.includes(address)) {
+          newMap[address] = inactiveTokens[address]
+        }
+        return newMap
+      }, {})
+    : inactiveTokens
+
+  return filteredInactive
+}
+
 export function useUnsupportedTokens(): { [address: string]: Token } {
   const unsupportedTokensMap = useUnsupportedTokenList()
   return useTokensFromMap(unsupportedTokensMap, false)
-}
-
-export function useSearchInactiveTokenLists(search: string | undefined, minResults = 10): WrappedTokenInfo[] {
-  const lists = useAllLists()
-  const inactiveUrls = useInactiveListUrls()
-  const { chainId } = useActiveWeb3React()
-  const activeTokens = useAllTokens()
-  return useMemo(() => {
-    if (!search || search.trim().length === 0) return []
-    const tokenFilter = createTokenFilterFunction(search)
-    const result: WrappedTokenInfo[] = []
-    const addressSet: { [address: string]: true } = {}
-    for (const url of inactiveUrls) {
-      const list = lists[url].current
-      if (!list) continue
-      for (const tokenInfo of list.tokens) {
-        if (tokenInfo.chainId === chainId && tokenFilter(tokenInfo)) {
-          const wrapped = new WrappedTokenInfo(tokenInfo, list)
-          if (!(wrapped.address in activeTokens) && !addressSet[wrapped.address]) {
-            addressSet[wrapped.address] = true
-            result.push(wrapped)
-            if (result.length >= minResults) return result
-          }
-        }
-      }
-    }
-    return result
-  }, [activeTokens, chainId, inactiveUrls, lists, minResults, search])
 }
 
 export function useIsTokenActive(token: Token | undefined | null): boolean {
@@ -99,6 +90,21 @@ export function useIsTokenActive(token: Token | undefined | null): boolean {
   return !!activeTokens[token.address]
 }
 
+// used to detect extra search results
+export function useFoundOnInactiveList(searchQuery: string): Token[] | undefined {
+  const { chainId } = useActiveWeb3React()
+  const inactiveTokens = useAllInactiveTokens()
+
+  return useMemo(() => {
+    if (!chainId || searchQuery === '') {
+      return undefined
+    } else {
+      const tokens = filterTokens(Object.values(inactiveTokens), searchQuery)
+      return tokens
+    }
+  }, [chainId, inactiveTokens, searchQuery])
+}
+
 // Check if currency is included in custom list from user storage
 export function useIsUserAddedToken(currency: Currency | undefined | null): boolean {
   const userAddedTokens = useUserAddedTokens()
@@ -107,7 +113,7 @@ export function useIsUserAddedToken(currency: Currency | undefined | null): bool
     return false
   }
 
-  return !!userAddedTokens.find((token) => currency.equals(token))
+  return !!userAddedTokens.find(token => currencyEquals(currency, token))
 }
 
 // parse a name or symbol from a token response
@@ -171,15 +177,12 @@ export function useToken(tokenAddress?: string): Token | undefined | null {
     token,
     tokenName.loading,
     tokenName.result,
-    tokenNameBytes32.result,
+    tokenNameBytes32.result
   ])
 }
 
 export function useCurrency(currencyId: string | undefined): Currency | null | undefined {
-  const { chainId } = useActiveWeb3React()
   const isETH = currencyId?.toUpperCase() === 'ETH'
   const token = useToken(isETH ? undefined : currencyId)
-  const weth = chainId ? WETH9_EXTENDED[chainId] : undefined
-  if (weth?.address?.toLowerCase() === currencyId?.toLowerCase()) return weth
-  return isETH ? (chainId ? ExtendedEther.onChain(chainId) : undefined) : token
+  return isETH ? ETHER : token
 }

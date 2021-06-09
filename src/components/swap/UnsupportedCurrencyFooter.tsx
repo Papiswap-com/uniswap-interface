@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import styled from 'styled-components/macro'
+import styled from 'styled-components'
 import { TYPE, CloseIcon, ExternalLink } from 'theme'
 import { ButtonEmpty } from 'components/Button'
 import Modal from 'components/Modal'
@@ -7,11 +7,11 @@ import Card, { OutlineCard } from 'components/Card'
 import { RowBetween, AutoRow } from 'components/Row'
 import { AutoColumn } from 'components/Column'
 import CurrencyLogo from 'components/CurrencyLogo'
-import { useActiveWeb3React } from 'hooks/web3'
-import { Currency, Token } from '@uniswap/sdk-core'
+import { useActiveWeb3React } from 'hooks'
+import { getEtherscanLink } from 'utils'
+import { Currency, Token } from '@uniswap/sdk'
+import { wrappedCurrency } from 'utils/wrappedCurrency'
 import { useUnsupportedTokens } from '../../hooks/Tokens'
-import { ExplorerDataType, getExplorerLink } from '../../utils/getExplorerLink'
-import { Trans } from '@lingui/macro'
 
 const DetailsFooter = styled.div<{ show: boolean }>`
   padding-top: calc(16px + 2rem);
@@ -40,7 +40,7 @@ const AddressText = styled(TYPE.blue)`
 
 export default function UnsupportedCurrencyFooter({
   show,
-  currencies,
+  currencies
 }: {
   show: boolean
   currencies: (Currency | undefined)[]
@@ -50,8 +50,8 @@ export default function UnsupportedCurrencyFooter({
 
   const tokens =
     chainId && currencies
-      ? currencies.map((currency) => {
-          return currency?.wrapped
+      ? currencies.map(currency => {
+          return wrappedCurrency(currency, chainId)
         })
       : []
 
@@ -63,12 +63,10 @@ export default function UnsupportedCurrencyFooter({
         <Card padding="2rem">
           <AutoColumn gap="lg">
             <RowBetween>
-              <TYPE.mediumHeader>
-                <Trans>Unsupported Assets</Trans>
-              </TYPE.mediumHeader>
+              <TYPE.mediumHeader>Unsupported Assets</TYPE.mediumHeader>
               <CloseIcon onClick={() => setShowDetails(false)} />
             </RowBetween>
-            {tokens.map((token) => {
+            {tokens.map(token => {
               return (
                 token &&
                 unsupportedTokens &&
@@ -80,7 +78,7 @@ export default function UnsupportedCurrencyFooter({
                         <TYPE.body fontWeight={500}>{token.symbol}</TYPE.body>
                       </AutoRow>
                       {chainId && (
-                        <ExternalLink href={getExplorerLink(chainId, token.address, ExplorerDataType.ADDRESS)}>
+                        <ExternalLink href={getEtherscanLink(chainId, token.address, 'address')}>
                           <AddressText>{token.address}</AddressText>
                         </ExternalLink>
                       )}
@@ -91,19 +89,15 @@ export default function UnsupportedCurrencyFooter({
             })}
             <AutoColumn gap="lg">
               <TYPE.body fontWeight={500}>
-                <Trans>
-                  Some assets are not available through this interface because they may not work well with the smart
-                  contracts or we are unable to allow trading for legal reasons.
-                </Trans>
+                Some assets are not available through this interface because they may not work well with our smart
+                contract or we are unable to allow trading for legal reasons.
               </TYPE.body>
             </AutoColumn>
           </AutoColumn>
         </Card>
       </Modal>
       <ButtonEmpty padding={'0'} onClick={() => setShowDetails(true)}>
-        <TYPE.blue>
-          <Trans>Read more about unsupported assets</Trans>
-        </TYPE.blue>
+        <TYPE.blue>Read more about unsupported assets</TYPE.blue>
       </ButtonEmpty>
     </DetailsFooter>
   )

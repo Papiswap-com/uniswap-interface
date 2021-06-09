@@ -1,14 +1,13 @@
-import JSBI from 'jsbi'
 import React from 'react'
-import { Currency, CurrencyAmount, Fraction } from '@uniswap/sdk-core'
+import { CurrencyAmount, Fraction, JSBI } from '@uniswap/sdk'
 
 const CURRENCY_AMOUNT_MIN = new Fraction(JSBI.BigInt(1), JSBI.BigInt(1000000))
 
 export default function FormattedCurrencyAmount({
   currencyAmount,
-  significantDigits = 4,
+  significantDigits = 4
 }: {
-  currencyAmount: CurrencyAmount<Currency>
+  currencyAmount: CurrencyAmount
   significantDigits?: number
 }) {
   return (

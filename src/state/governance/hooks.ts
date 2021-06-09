@@ -1,16 +1,14 @@
-import { CurrencyAmount, Token } from '@uniswap/sdk-core'
+import { UNI, PRELOADED_PROPOSALS } from './../../constants/index'
+import { TokenAmount } from '@uniswap/sdk'
 import { isAddress } from 'ethers/lib/utils'
-import { PROPOSAL_DESCRIPTION_TEXT } from '../../constants/proposals'
-import { UNI } from '../../constants/tokens'
 import { useGovernanceContract, useUniContract } from '../../hooks/useContract'
-import usePrevious from '../../hooks/usePrevious'
-import { calculateGasMargin } from '../../utils/calculateGasMargin'
 import { useSingleCallResult, useSingleContractMultipleData } from '../multicall/hooks'
-import { useActiveWeb3React } from '../../hooks/web3'
+import { useActiveWeb3React } from '../../hooks'
 import { ethers, utils } from 'ethers'
+import { calculateGasMargin } from '../../utils'
 import { TransactionResponse } from '@ethersproject/providers'
 import { useTransactionAdder } from '../transactions/hooks'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { abi as GOV_ABI } from '@uniswap/governance/build/GovernorAlpha.json'
 
 interface ProposalDetail {
@@ -24,7 +22,7 @@ export interface ProposalData {
   title: string
   description: string
   proposer: string
-  status: ProposalState
+  status: string
   forCount: number
   againstCount: number
   startBlock: number
@@ -32,16 +30,9 @@ export interface ProposalData {
   details: ProposalDetail[]
 }
 
-export enum ProposalState {
-  Undetermined = -1,
-  Pending,
-  Active,
-  Canceled,
-  Defeated,
-  Succeeded,
-  Queued,
-  Expired,
-  Executed,
+const enumerateProposalState = (state: number) => {
+  const proposalStates = ['pending', 'active', 'canceled', 'defeated', 'succeeded', 'queued', 'expired', 'executed']
+  return proposalStates[state]
 }
 
 // get count of all proposals made
@@ -58,64 +49,46 @@ export function useProposalCount(): number | undefined {
  * Need proposal events to get description data emitted from
  * new proposal event.
  */
-const eventParser = new ethers.utils.Interface(GOV_ABI)
 export function useDataFromEventLogs() {
-  const { library, chainId } = useActiveWeb3React()
-  const [formattedEvents, setFormattedEvents] =
-    useState<{ description: string; details: { target: string; functionSig: string; callData: string }[] }[]>()
+  const { library } = useActiveWeb3React()
+  const [formattedEvents, setFormattedEvents] = useState<any>()
   const govContract = useGovernanceContract()
 
   // create filter for these specific events
-  const filter = useMemo(
-    () => (govContract ? { ...govContract.filters.ProposalCreated(), fromBlock: 0, toBlock: 'latest' } : undefined),
-    [govContract]
-  )
-
-  const previousChainId = usePrevious(chainId)
+  const filter = { ...govContract?.filters?.['ProposalCreated'](), fromBlock: 0, toBlock: 'latest' }
+  const eventParser = new ethers.utils.Interface(GOV_ABI)
 
   useEffect(() => {
-    if (!filter || !library || chainId === previousChainId) return
-    let stale = false
+    async function fetchData() {
+      const pastEvents = await library?.getLogs(filter)
+      // reverse events to get them from newest to odlest
+      const formattedEventData = pastEvents
+        ?.map(event => {
+          const eventParsed = eventParser.parseLog(event).args
+          return {
+            description: eventParsed.description,
+            details: eventParsed.targets.map((target: string, i: number) => {
+              const signature = eventParsed.signatures[i]
+              const [name, types] = signature.substr(0, signature.length - 1).split('(')
 
-    if (!formattedEvents) {
-      library
-        .getLogs(filter)
-        .then((proposalEvents) => {
-          if (stale) return
-          // reverse events to get them from newest to odlest
-          const formattedEventData = proposalEvents
-            ?.map((event) => {
-              const eventParsed = eventParser.parseLog(event).args
+              const calldata = eventParsed.calldatas[i]
+              const decoded = utils.defaultAbiCoder.decode(types.split(','), calldata)
+
               return {
-                description: eventParsed.description,
-                details: eventParsed.targets.map((target: string, i: number) => {
-                  const signature = eventParsed.signatures[i]
-                  const [name, types] = signature.substr(0, signature.length - 1).split('(')
-
-                  const calldata = eventParsed.calldatas[i]
-                  const decoded = utils.defaultAbiCoder.decode(types.split(','), calldata)
-
-                  return {
-                    target,
-                    functionSig: name,
-                    callData: decoded.join(', '),
-                  }
-                }),
+                target,
+                functionSig: name,
+                callData: decoded.join(', ')
               }
             })
-            .reverse()
-          setFormattedEvents(formattedEventData)
+          }
         })
-        .catch((error) => {
-          console.error('Failed to fetch proposals', error)
-        })
-      return () => {
-        stale = true
-      }
+        .reverse()
+      setFormattedEvents(formattedEventData)
     }
-
-    return
-  }, [filter, library, formattedEvents, chainId, previousChainId])
+    if (!formattedEvents) {
+      fetchData()
+    }
+  }, [eventParser, filter, library, formattedEvents])
 
   return formattedEvents
 }
@@ -148,18 +121,18 @@ export function useAllProposalData() {
         return Boolean(p.result) && Boolean(allProposalStates[i]?.result) && Boolean(formattedEvents[i])
       })
       .map((p, i) => {
-        const description = PROPOSAL_DESCRIPTION_TEXT[allProposals.length - i - 1] || formattedEvents[i].description
+        const description = PRELOADED_PROPOSALS.get(allProposals.length - i - 1) || formattedEvents[i].description
         const formattedProposal: ProposalData = {
           id: allProposals[i]?.result?.id.toString(),
           title: description?.split(/# |\n/g)[1] || 'Untitled',
           description: description || 'No description.',
           proposer: allProposals[i]?.result?.proposer,
-          status: allProposalStates[i]?.result?.[0] ?? ProposalState.Undetermined,
+          status: enumerateProposalState(allProposalStates[i]?.result?.[0]) ?? 'Undetermined',
           forCount: parseFloat(ethers.utils.formatUnits(allProposals[i]?.result?.forVotes.toString(), 18)),
           againstCount: parseFloat(ethers.utils.formatUnits(allProposals[i]?.result?.againstVotes.toString(), 18)),
           startBlock: parseInt(allProposals[i]?.result?.startBlock?.toString()),
           endBlock: parseInt(allProposals[i]?.result?.endBlock?.toString()),
-          details: formattedEvents[i].details,
+          details: formattedEvents[i].details
         }
         return formattedProposal
       })
@@ -170,7 +143,7 @@ export function useAllProposalData() {
 
 export function useProposalData(id: string): ProposalData | undefined {
   const allProposalData = useAllProposalData()
-  return allProposalData?.find((p) => p.id === id)
+  return allProposalData?.find(p => p.id === id)
 }
 
 // get the users delegatee if it exists
@@ -182,18 +155,18 @@ export function useUserDelegatee(): string {
 }
 
 // gets the users current votes
-export function useUserVotes(): CurrencyAmount<Token> | undefined {
+export function useUserVotes(): TokenAmount | undefined {
   const { account, chainId } = useActiveWeb3React()
   const uniContract = useUniContract()
 
   // check for available votes
   const uni = chainId ? UNI[chainId] : undefined
   const votes = useSingleCallResult(uniContract, 'getCurrentVotes', [account ?? undefined])?.result?.[0]
-  return votes && uni ? CurrencyAmount.fromRawAmount(uni, votes) : undefined
+  return votes && uni ? new TokenAmount(uni, votes) : undefined
 }
 
 // fetch available votes as of block (usually proposal start block)
-export function useUserVotesAsOfBlock(block: number | undefined): CurrencyAmount<Token> | undefined {
+export function useUserVotesAsOfBlock(block: number | undefined): TokenAmount | undefined {
   const { account, chainId } = useActiveWeb3React()
   const uniContract = useUniContract()
 
@@ -201,7 +174,7 @@ export function useUserVotesAsOfBlock(block: number | undefined): CurrencyAmount
   const uni = chainId ? UNI[chainId] : undefined
   const votes = useSingleCallResult(uniContract, 'getPriorVotes', [account ?? undefined, block ?? undefined])
     ?.result?.[0]
-  return votes && uni ? CurrencyAmount.fromRawAmount(uni, votes) : undefined
+  return votes && uni ? new TokenAmount(uni, votes) : undefined
 }
 
 export function useDelegateCallback(): (delegatee: string | undefined) => undefined | Promise<string> {
@@ -215,12 +188,12 @@ export function useDelegateCallback(): (delegatee: string | undefined) => undefi
       if (!library || !chainId || !account || !isAddress(delegatee ?? '')) return undefined
       const args = [delegatee]
       if (!uniContract) throw new Error('No UNI Contract!')
-      return uniContract.estimateGas.delegate(...args, {}).then((estimatedGasLimit) => {
+      return uniContract.estimateGas.delegate(...args, {}).then(estimatedGasLimit => {
         return uniContract
           .delegate(...args, { value: null, gasLimit: calculateGasMargin(estimatedGasLimit) })
           .then((response: TransactionResponse) => {
             addTransaction(response, {
-              summary: `Delegated votes`,
+              summary: `Delegated votes`
             })
             return response.hash
           })
@@ -242,12 +215,12 @@ export function useVoteCallback(): {
     (proposalId: string | undefined, support: boolean) => {
       if (!account || !govContract || !proposalId) return
       const args = [proposalId, support]
-      return govContract.estimateGas.castVote(...args, {}).then((estimatedGasLimit) => {
+      return govContract.estimateGas.castVote(...args, {}).then(estimatedGasLimit => {
         return govContract
           .castVote(...args, { value: null, gasLimit: calculateGasMargin(estimatedGasLimit) })
           .then((response: TransactionResponse) => {
             addTransaction(response, {
-              summary: `Voted ${support ? 'for ' : 'against'} proposal ${proposalId}`,
+              summary: `Voted ${support ? 'for ' : 'against'} proposal ${proposalId}`
             })
             return response.hash
           })

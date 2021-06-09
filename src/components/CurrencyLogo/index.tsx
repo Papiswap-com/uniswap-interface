@@ -1,9 +1,10 @@
-import { Currency } from '@uniswap/sdk-core'
+import { Currency, ETHER, Token } from '@uniswap/sdk'
 import React, { useMemo } from 'react'
-import styled from 'styled-components/macro'
+import styled from 'styled-components'
+
 import EthereumLogo from '../../assets/images/ethereum-logo.png'
 import useHttpLocations from '../../hooks/useHttpLocations'
-import { WrappedTokenInfo } from '../../state/lists/wrappedTokenInfo'
+import { WrappedTokenInfo } from '../../state/lists/hooks'
 import Logo from '../Logo'
 
 export const getTokenLogoURL = (address: string) =>
@@ -27,8 +28,7 @@ const StyledLogo = styled(Logo)<{ size: string }>`
 export default function CurrencyLogo({
   currency,
   size = '24px',
-  style,
-  ...rest
+  style
 }: {
   currency?: Currency
   size?: string
@@ -37,21 +37,20 @@ export default function CurrencyLogo({
   const uriLocations = useHttpLocations(currency instanceof WrappedTokenInfo ? currency.logoURI : undefined)
 
   const srcs: string[] = useMemo(() => {
-    if (!currency || currency.isNative) return []
+    if (currency === ETHER) return []
 
-    if (currency.isToken) {
-      const defaultUrls = currency.chainId === 1 ? [getTokenLogoURL(currency.address)] : []
+    if (currency instanceof Token) {
       if (currency instanceof WrappedTokenInfo) {
-        return [...uriLocations, ...defaultUrls]
+        return [...uriLocations, getTokenLogoURL(currency.address)]
       }
-      return defaultUrls
+      return [getTokenLogoURL(currency.address)]
     }
     return []
   }, [currency, uriLocations])
 
-  if (currency?.isNative) {
-    return <StyledEthereumLogo src={EthereumLogo} size={size} style={style} {...rest} />
+  if (currency === ETHER) {
+    return <StyledEthereumLogo src={EthereumLogo} size={size} style={style} />
   }
 
-  return <StyledLogo size={size} srcs={srcs} alt={`${currency?.symbol ?? 'token'} logo`} style={style} {...rest} />
+  return <StyledLogo size={size} srcs={srcs} alt={`${currency?.symbol ?? 'token'} logo`} style={style} />
 }

@@ -1,6 +1,5 @@
-import { Trans } from '@lingui/macro'
 import React from 'react'
-import styled from 'styled-components/macro'
+import styled from 'styled-components'
 
 const ToggleElement = styled.span<{ isActive?: boolean; isOnSwitch?: boolean }>`
   padding: 0.25rem 0.5rem;
@@ -45,10 +44,10 @@ export default function Toggle({ id, isActive, toggle }: ToggleProps) {
   return (
     <StyledToggle id={id} isActive={isActive} onClick={toggle}>
       <ToggleElement isActive={isActive} isOnSwitch={true}>
-        <Trans>On</Trans>
+        On
       </ToggleElement>
       <ToggleElement isActive={!isActive} isOnSwitch={false}>
-        <Trans>Off</Trans>
+        Off
       </ToggleElement>
     </StyledToggle>
   )
